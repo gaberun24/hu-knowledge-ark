@@ -56,17 +56,36 @@ services:
 
     user: "${PUID:-1000}:${PGID:-1000}"
 
+    # Hozzá kell adni a Docker socket csoportját (a host gépen), hogy a
+    # PUID/PGID-es felhasználó tudjon a /var/run/docker.sock-ra írni.
+    # A `id -g docker` paranccsal nézd meg a host gépen, és tedd be .env-be.
+    group_add:
+      - "${DOCKER_GID:-989}"
+
     environment:
       - TZ=${TZ:-Europe/Budapest}
       - KIWIX_INTERNAL_URL=http://kiwix:8080
       - KIWIX_PUBLIC_PORT=${KIWIX_PORT:-8888}
       - DATA_DIR=/data
+      # A host gép DATA_DIR-je — kell a Docker socket hívásokhoz, mert a
+      # daemon a host path-okat várja, nem a konténerbelit.
+      - DATA_DIR_HOST=${DATA_DIR:-./data}
       - CONFIG_FILE=/app/config/content.yaml
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - KIWIX_CONTAINER=hu-ark-kiwix
       - FLASK_ENV=production
+      - FLASK_SECRET=${FLASK_SECRET:-change-me-in-env}
 
     volumes:
-      - ${DATA_DIR:-./data}:/data:ro
-      - ./config:/app/config:ro
+      # A data RW, hogy a háttér-letöltő tudja ide menteni a ZIM-eket
+      - ${DATA_DIR:-./data}:/data:rw
+      # A config RW, hogy a Beállítások UI tudja menteni a content.yaml-t
+      - ./config:/app/config:rw
+      # Docker socket — a landing maga futtatja a kiwix-tools image-t a library
+      # építéséhez és restart-olja a kiwix konténert. LAN-only stack — ne tegyél
+      # a landing portjára publikus elérést, mert a socket a host root!
+      - /var/run/docker.sock:/var/run/docker.sock
 
     ports:
       - "${LANDING_PORT:-5050}:5000"

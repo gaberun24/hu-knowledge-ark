@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Az alkalmazás
 COPY app.py .
+COPY downloader.py .
 COPY templates/ ./templates/
 COPY static/ ./static/
 

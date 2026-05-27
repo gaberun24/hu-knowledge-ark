@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block title %}Beállítások — Magyar Tudásbárka{% endblock %}
+
+{% block content %}
+<section class="settings">
+    <h1>Beállítások</h1>
+
+    {% if request.args.get('saved') %}
+    <div class="flash flash-ok">Beállítások elmentve. A változások a következő letöltéskor érvényesülnek.</div>
+    {% endif %}
+
+    <form method="post" action="/settings" class="settings-form">
+
+        <h2>Tartalmak</h2>
+        <p class="hint">Pipáld be, amit szeretnél tárolni a Bárkán. A becsült összes méret a lista alatt látható.</p>
+
+        <table class="settings-table">
+            <thead>
+                <tr>
+                    <th style="width:3em">Be</th>
+                    <th>Tartalom</th>
+                    <th>Leírás</th>
+                    <th>Becsült méret</th>
+                    <th>Letöltve</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for s in sources %}
+                <tr>
+                    <td><input type="checkbox" name="enabled" value="{{ s.id }}"
+                               {% if s.enabled %}checked{% endif %}
+                               aria-label="{{ s.title }} engedélyezése"></td>
+                    <td><strong>{{ s.title }}</strong><br><small>{{ s.id }}</small></td>
+                    <td>{{ s.description or "" }}</td>
+                    <td>{{ sizes.get(s.id, "?") }} MB</td>
+                    <td>
+                        {% set files = existing.get(s.id, []) %}
+                        {% if files %}
+                            {% for f in files %}
+                            <span class="badge ok" title="{{ f.name }}">{{ f.size_human }}</span>
+                            {% endfor %}
+                        {% else %}
+                            <span class="badge none">nincs</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+
+        <h2>Térkép</h2>
+        <p class="hint">
+            Bounding box (nyugat,dél,kelet,észak) WGS84 koordinátákban.
+            <a href="https://boundingbox.klokantech.com/" target="_blank" rel="noopener">bbox kiszámítása térképről</a>.
+        </p>
+        <div class="grid">
+            <label>
+                <input type="checkbox" name="map_enabled"
+                       {% if map_cfg.get('enabled') %}checked{% endif %}>
+                Térkép letöltése
+            </label>
+            <label>
+                Bounding box:
+                <input type="text" name="map_bbox" value="{{ map_cfg.get('bbox', '') }}"
+                       placeholder="15.40,45.70,18.20,47.80"
+                       size="40">
+            </label>
+            <label>
+                Fájlnév:
+                <input type="text" name="map_output" value="{{ map_cfg.get('output_name', '') }}"
+                       placeholder="zala-region.pmtiles"
+                       size="40">
+            </label>
+        </div>
+
+        <div class="actions">
+            <button type="submit" class="btn-primary">💾 Mentés</button>
+        </div>
+    </form>
+
+    <hr>
+
+    <section class="action-zone">
+        <h2>Letöltés</h2>
+        <p>
+            Becsült méret a jelenleg pipált tartalmakhoz:
+            <strong id="estimated-size">{{ estimated_total_mb }} MB</strong>.
+            A letöltés a háttérben fut, közben tudod használni az oldalt.
+        </p>
+        <button id="btn-start-download" class="btn-primary">⬇️ Letöltés indítása</button>
+        <button id="btn-stop-download" class="btn-secondary" disabled>Megáll</button>
+
+        <div id="progress-area" class="progress-area" hidden>
+            <h3 id="progress-step">Indítás…</h3>
+            <div class="progress-bar">
+                <div id="progress-fill"></div>
+            </div>
+            <div class="progress-text">
+                <span id="progress-percent">0%</span>
+                <span id="progress-counts"></span>
+            </div>
+            <pre id="progress-log" class="progress-log"></pre>
+        </div>
+
+        <p class="hint" style="margin-top:1rem">
+            <strong>Térkép:</strong> a pmtiles térképet a parancssorban kell letölteni
+            (<code>./scripts/pmtiles-extract.sh</code>), mert a böngészőből nem hatékony
+            a 80 GB-os planet build-ből kivágás.
+        </p>
+    </section>
+</section>
+
+<script>
+(function() {
+    const btnStart = document.getElementById('btn-start-download');
+    const progressArea = document.getElementById('progress-area');
+    const progressStep = document.getElementById('progress-step');
+    const progressFill = document.getElementById('progress-fill');
+    const progressPercent = document.getElementById('progress-percent');
+    const progressCounts = document.getElementById('progress-counts');
+    const progressLog = document.getElementById('progress-log');
+
+    let pollTimer = null;
+
+    btnStart.addEventListener('click', async () => {
+        btnStart.disabled = true;
+        progressArea.hidden = false;
+        progressStep.textContent = 'Indítás…';
+        progressLog.textContent = '';
+        try {
+            const r = await fetch('/actions/update', { method: 'POST' });
+            const data = await r.json();
+            if (!data.ok) {
+                progressStep.textContent = 'Hiba: ' + (data.error || 'ismeretlen');
+                btnStart.disabled = false;
+                return;
+            }
+            startPolling();
+        } catch (e) {
+            progressStep.textContent = 'Hálózati hiba: ' + e.message;
+            btnStart.disabled = false;
+        }
+    });
+
+    function startPolling() {
+        if (pollTimer) clearInterval(pollTimer);
+        pollTimer = setInterval(refreshStatus, 1500);
+        refreshStatus();
+    }
+
+    async function refreshStatus() {
+        try {
+            const r = await fetch('/actions/status');
+            const s = await r.json();
+
+            progressStep.textContent = s.current_step || 'Folyamatban…';
+
+            const itemPct = (s.current_item_progress || 0) * 100;
+            const overallPct = s.items_total > 0
+                ? ((s.items_done + (s.current_item_progress || 0)) / s.items_total) * 100
+                : 0;
+            progressFill.style.width = overallPct.toFixed(1) + '%';
+            progressPercent.textContent = overallPct.toFixed(0) + '%';
+            progressCounts.textContent = s.items_total
+                ? `(${s.items_done}/${s.items_total} tétel, jelenlegi: ${itemPct.toFixed(0)}%)`
+                : '';
+
+            if (s.log && s.log.length) {
+                progressLog.textContent = s.log.slice(-30).join('\n');
+                progressLog.scrollTop = progressLog.scrollHeight;
+            }
+
+            if (!s.running) {
+                clearInterval(pollTimer);
+                pollTimer = null;
+                btnStart.disabled = false;
+                progressFill.style.width = '100%';
+                if (s.error) {
+                    progressStep.textContent = 'Hiba: ' + s.error;
+                } else {
+                    progressStep.textContent = '✓ Kész';
+                }
+            }
+        } catch (e) {
+            console.error('status fetch fail', e);
+        }
+    }
+
+    // Ha az oldal megnyitásakor már fut egy job (pl. másik tabban indították),
+    // azonnal kezdjük el pollozni.
+    fetch('/actions/status').then(r => r.json()).then(s => {
+        if (s.running) {
+            progressArea.hidden = false;
+            btnStart.disabled = true;
+            startPolling();
+        }
+    }).catch(() => {});
+})();
+</script>
+{% endblock %}

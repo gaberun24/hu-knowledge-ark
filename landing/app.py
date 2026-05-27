@@ -11,18 +11,22 @@ from __future__ import annotations
 
 import glob
 import os
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
-from flask import Flask, render_template, request, redirect, jsonify, send_from_directory, abort
+from flask import Flask, render_template, request, redirect, jsonify, send_from_directory, abort, flash, url_for
+
+import downloader
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 CONFIG_FILE = Path(os.environ.get("CONFIG_FILE", "/app/config/content.yaml"))
 KIWIX_PUBLIC_PORT = os.environ.get("KIWIX_PUBLIC_PORT", "8888")
 
 app = Flask(__name__)
+app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET", "dev-only-not-used-in-production")
 
 
 @dataclass
@@ -175,6 +179,112 @@ def map_page():
     if not map_info:
         abort(404, description="A térkép nincs letöltve. Futtasd: make download")
     return render_template("map.html", map_info=map_info)
+
+
+# ---------------------------------------------------------------------------
+# Beállítások UI — bárki módosíthatja a content.yaml-t LAN-ról.
+# ---------------------------------------------------------------------------
+
+def _load_config_dict() -> dict:
+    with CONFIG_FILE.open(encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
+
+
+def _save_config_dict(cfg: dict) -> None:
+    """Atomic write: temp fájlba, aztán rename. Megőrzi a kommenteket nem
+    tudja (YAML kommentet a safe_dump nem ismer), de a fájl szerkezete és
+    érvényes lesz. Egy backup fájlt is mentünk minden mentésnél."""
+    backup = CONFIG_FILE.with_suffix(".yaml.bak")
+    if CONFIG_FILE.exists():
+        backup.write_bytes(CONFIG_FILE.read_bytes())
+
+    tmp = CONFIG_FILE.with_suffix(".yaml.tmp")
+    with tmp.open("w", encoding="utf-8") as f:
+        yaml.safe_dump(cfg, f, allow_unicode=True, sort_keys=False, indent=2)
+    tmp.replace(CONFIG_FILE)
+
+
+# A kategória-megjelenítéshez szükséges méretbecslések, hogy a /settings UI
+# tudja mondani "ez kb 6 GB lesz". Konzervatív becslések.
+ESTIMATED_SIZES_MB = {
+    "wikipedia_hu":         6500,
+    "wikipedia_hu_nopic":   1500,
+    "wiktionary_hu":         150,
+    "wikibooks_hu":          100,
+    "wikiquote_hu":           20,
+    "wikisource_hu":         500,
+}
+
+
+@app.route("/settings", methods=["GET"])
+def settings_page():
+    cfg = _load_config_dict()
+    sources = cfg.get("zim_sources", [])
+    map_cfg = cfg.get("map", {}) or {}
+
+    # Megmutatjuk a már letöltött fájlokat is, hogy a felhasználó tudja, mi van meg
+    existing = {}
+    zim_dir = DATA_DIR / "zim"
+    if zim_dir.exists():
+        for p in zim_dir.glob("*.zim"):
+            sid = p.name.split("__", 1)[0] if "__" in p.name else p.stem
+            existing.setdefault(sid, []).append({
+                "name": p.name,
+                "size_human": human_size(p.stat().st_size),
+            })
+
+    # Becsült összméret a jelenleg enabled tételekre
+    estimated_total_mb = sum(
+        ESTIMATED_SIZES_MB.get(s["id"], 100) for s in sources if s.get("enabled")
+    )
+
+    return render_template("settings.html",
+                           sources=sources,
+                           map_cfg=map_cfg,
+                           existing=existing,
+                           estimated_total_mb=estimated_total_mb,
+                           sizes=ESTIMATED_SIZES_MB)
+
+
+@app.route("/settings", methods=["POST"])
+def settings_save():
+    cfg = _load_config_dict()
+
+    # Form-feldolgozás. A POST adatban minden tételhez tartozik egy
+    # `enabled_<id>` checkbox (hiányzik = false), és a térképhez a bbox + enabled.
+    submitted_enabled = set(request.form.getlist("enabled"))
+
+    for src in cfg.get("zim_sources", []):
+        src["enabled"] = src["id"] in submitted_enabled
+
+    # Térkép
+    map_cfg = cfg.setdefault("map", {})
+    map_cfg["enabled"] = "map_enabled" in request.form
+    bbox = request.form.get("map_bbox", "").strip()
+    if bbox:
+        map_cfg["bbox"] = bbox
+    output_name = request.form.get("map_output", "").strip()
+    if output_name:
+        map_cfg["output_name"] = output_name
+
+    _save_config_dict(cfg)
+
+    return redirect(url_for("settings_page") + "?saved=1")
+
+
+@app.route("/actions/update", methods=["POST"])
+def actions_update():
+    """Elindít egy háttér letöltést. JSON választ ad vissza."""
+    started = downloader.run_update_job()
+    if not started:
+        return jsonify({"ok": False, "error": "Már fut egy letöltés."}), 409
+    return jsonify({"ok": True, "message": "Letöltés elindult."})
+
+
+@app.route("/actions/status")
+def actions_status():
+    """A háttér task aktuális állapota — a settings oldal pollozza."""
+    return jsonify(downloader.get_state())
 
 
 @app.route("/healthz")
