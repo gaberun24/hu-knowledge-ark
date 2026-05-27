@@ -37,7 +37,7 @@
     <section class="category">
         <h2>{{ cat.label }}</h2>
         <div class="cards">
-        {% for item in cat.items %}
+        {% for item in cat.entries %}
             <a class="card" href="{{ item.kiwix_url }}">
                 <div class="card-icon" aria-hidden="true">📚</div>
                 <div class="card-body">

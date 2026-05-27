@@ -144,12 +144,12 @@ def index():
     categories = []
     for key, label in CATEGORY_LABELS.items():
         if key in by_cat:
-            categories.append({"key": key, "label": label, "items": by_cat[key]})
+            categories.append({"key": key, "label": label, "entries": by_cat[key]})
 
     # A nem definiált kategóriák a végére
     for key, lst in by_cat.items():
         if key not in CATEGORY_LABELS:
-            categories.append({"key": key, "label": key.title(), "items": lst})
+            categories.append({"key": key, "label": key.title(), "entries": lst})
 
     map_info = discover_map()
     return render_template("index.html",
