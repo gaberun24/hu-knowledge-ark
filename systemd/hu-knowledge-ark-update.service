@@ -1,0 +1,23 @@
+[Unit]
+Description=hu-knowledge-ark — tartalom frissítése a Kiwix-ről
+Documentation=https://github.com/hajasgabor/hu-knowledge-ark
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=@ARK_ROOT@
+
+# A logok a journal-ba mennek, journalctl -u hu-knowledge-ark-update -el visszanézhető.
+StandardOutput=journal
+StandardError=journal
+
+# A teljes update + restart pipeline egyetlen scriptben (Makefile target).
+ExecStart=/usr/bin/make -C @ARK_ROOT@ update
+
+# Ne fusson tovább 2 óránál — ha valami beragad, járjon le.
+TimeoutStartSec=7200s
+
+[Install]
+WantedBy=multi-user.target

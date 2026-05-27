@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1f6feb">
+    <title>{% block title %}Magyar Tudásbárka{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header class="topbar">
+        <a class="brand" href="/">
+            <span class="logo" aria-hidden="true">⛵</span>
+            <span class="brand-text">
+                <strong>Magyar Tudásbárka</strong>
+                <small>offline tudásbázis</small>
+            </span>
+        </a>
+        <form class="search" action="/search" method="get" role="search">
+            <input type="search" name="q" placeholder="Keresés a tudásbázisban…"
+                   aria-label="Keresés" autocomplete="off">
+            <button type="submit" aria-label="Keresés indítása">Keresés</button>
+        </form>
+    </header>
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <p>
+            Tartalom: a <a href="https://hu.wikipedia.org">Wikimédia</a> projektek (CC BY-SA).
+            Térkép: <a href="https://protomaps.com">Protomaps</a> &amp;
+            <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> közreműködői.
+        </p>
+        <p>
+            Szoftver: <a href="https://github.com/hajasgabor/hu-knowledge-ark">hu-knowledge-ark</a> — MIT licenc.
+        </p>
+    </footer>
+</body>
+</html>

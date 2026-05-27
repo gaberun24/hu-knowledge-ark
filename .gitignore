@@ -1,0 +1,35 @@
+# Környezeti változók (gépspecifikus, NEM mehet bele a publikus repóba)
+.env
+.env.local
+.env.*.local
+
+# Adatkönyvtár — ide kerülnek a letöltött ZIM-ek és térkép, ezek nem mennek a repóba
+data/
+*.zim
+*.zim.tmp
+*.zim.partial
+*.zim.sha256
+*.pmtiles
+*.pmtiles.tmp
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+
+# Docker
+.docker/
+
+# OS
+.DS_Store
+Thumbs.db
+*~
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo

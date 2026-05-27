@@ -1,0 +1,83 @@
+# hu-knowledge-ark — Docker Compose stack
+#
+# Két szolgáltatás:
+#   - kiwix: ZIM tartalmat szolgál, beépített Xapian-alapú kereséssel
+#   - landing: magyar nyelvű kezdőoldal, kategória-kártyák, térkép viewer
+#
+# Indítás: make up   (vagy: docker compose up -d)
+# Leállítás: make down
+
+name: hu-knowledge-ark
+
+services:
+
+  kiwix:
+    image: ghcr.io/kiwix/kiwix-tools:latest
+    container_name: hu-ark-kiwix
+    restart: unless-stopped
+
+    # Annak a usernek a UID/GID-jével írjon, akinek a DATA_DIR tartozik.
+    # CIFS/NFS megosztásnál ez különösen fontos (forceuid mount opció).
+    user: "${PUID:-1000}:${PGID:-1000}"
+
+    environment:
+      - TZ=${TZ:-Europe/Budapest}
+
+    volumes:
+      # A teljes data könyvtár olvasható: zim/, library.xml, maps/
+      - ${DATA_DIR:-./data}:/data:ro
+
+    # A library.xml-t használjuk (több ZIM egyszerre), a beépített web UI-val
+    # és Xapian keresővel. A --port a konténer belső portja.
+    command:
+      - kiwix-serve
+      - --library
+      - /data/library.xml
+      - --port
+      - "8080"
+
+    ports:
+      - "${KIWIX_PORT:-8888}:8080"
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/ROOT/library/library.xml | head -c 100 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  landing:
+    build:
+      context: ./landing
+      dockerfile: Dockerfile
+    image: hu-knowledge-ark/landing:latest
+    container_name: hu-ark-landing
+    restart: unless-stopped
+
+    user: "${PUID:-1000}:${PGID:-1000}"
+
+    environment:
+      - TZ=${TZ:-Europe/Budapest}
+      - KIWIX_INTERNAL_URL=http://kiwix:8080
+      - KIWIX_PUBLIC_PORT=${KIWIX_PORT:-8888}
+      - DATA_DIR=/data
+      - CONFIG_FILE=/app/config/content.yaml
+      - FLASK_ENV=production
+
+    volumes:
+      - ${DATA_DIR:-./data}:/data:ro
+      - ./config:/app/config:ro
+
+    ports:
+      - "${LANDING_PORT:-5050}:5000"
+
+    depends_on:
+      kiwix:
+        condition: service_started
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5000/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Offline térkép — Magyar Tudásbárka{% endblock %}
+
+{% block content %}
+<section class="map-section">
+    <h1>Offline térkép</h1>
+    <p class="map-meta">
+        Fájl: <code>{{ map_info.name }}</code> ({{ map_info.size_human }}).
+        Terület (bbox): <code>{{ map_info.bbox }}</code>.
+    </p>
+    <div id="map"></div>
+</section>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin="anonymous">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin="anonymous"></script>
+<script src="https://unpkg.com/protomaps-leaflet@4.2.1/dist/protomaps-leaflet.min.js"
+        crossorigin="anonymous"></script>
+
+<script>
+(function() {
+    // BBox: "west,south,east,north"
+    const bbox = "{{ map_info.bbox }}".split(",").map(Number);
+    const centerLat = (bbox[1] + bbox[3]) / 2;
+    const centerLng = (bbox[0] + bbox[2]) / 2;
+
+    const map = L.map("map").setView([centerLat, centerLng], 9);
+
+    const layer = protomapsL.leafletLayer({
+        url: "{{ map_info.url }}",
+        // Magyar nyelvű feliratok, ha rendelkezésre állnak (a Protomaps Basemap
+        // tartalmazza a `name:hu` címkéket, ahol létezik).
+        lang: "hu"
+    });
+    layer.addTo(map);
+
+    // Bounding box-ra korlátozott navigálás
+    map.fitBounds([
+        [bbox[1], bbox[0]],
+        [bbox[3], bbox[2]]
+    ]);
+    map.setMaxBounds([
+        [bbox[1] - 0.5, bbox[0] - 0.5],
+        [bbox[3] + 0.5, bbox[2] + 0.5]
+    ]);
+})();
+</script>
+{% endblock %}

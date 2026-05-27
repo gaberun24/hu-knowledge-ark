@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Magyar Tudásbárka{% endblock %}
+
+{% block content %}
+
+{% if total_items == 0 %}
+    <section class="empty-state">
+        <h1>Üdvözöllek!</h1>
+        <p>Még nincs egyetlen letöltött tudásbázis sem ebben az ark-ban.</p>
+        <p>Futtasd a host gépen:</p>
+        <pre><code>make download</code></pre>
+        <p>Ezután frissítsd ezt az oldalt.</p>
+    </section>
+{% else %}
+    <section class="intro">
+        <h1>Mit szeretnél megtudni?</h1>
+        <p>Írj a fenti keresőbe, vagy válassz a témakörök közül.</p>
+    </section>
+
+    {% if map_info %}
+    <section class="category">
+        <h2>🗺️ Térkép</h2>
+        <div class="cards">
+            <a class="card" href="/map">
+                <div class="card-icon" aria-hidden="true">🗺️</div>
+                <div class="card-body">
+                    <h3>Offline térkép</h3>
+                    <p>OpenStreetMap alapú vektoros térkép a kiválasztott régióról.</p>
+                    <small>{{ map_info.size_human }} · bbox: {{ map_info.bbox }}</small>
+                </div>
+            </a>
+        </div>
+    </section>
+    {% endif %}
+
+    {% for cat in categories %}
+    <section class="category">
+        <h2>{{ cat.label }}</h2>
+        <div class="cards">
+        {% for item in cat.items %}
+            <a class="card" href="{{ item.kiwix_url }}">
+                <div class="card-icon" aria-hidden="true">📚</div>
+                <div class="card-body">
+                    <h3>{{ item.title }}</h3>
+                    {% if item.description %}<p>{{ item.description }}</p>{% endif %}
+                    <small>{{ item.size_human }} · {{ item.file_name }}</small>
+                </div>
+            </a>
+        {% endfor %}
+        </div>
+    </section>
+    {% endfor %}
+{% endif %}
+
+{% endblock %}

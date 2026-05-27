@@ -1,0 +1,113 @@
+# hu-knowledge-ark tartalom-katalógus
+# ====================================
+#
+# Itt sorolod fel, milyen offline tudásanyagot szeretnél tárolni.
+# Az `enabled: false` flag-gel kihagyhatsz egyes tételeket, vagy újat
+# tehetsz be a sablon alapján.
+#
+# A `pattern` glob-szerű mintát ad meg a fájlnévre. A frissítő script
+# (scripts/update.sh) a `base_url` HTML listájából a pattern alapján
+# kikeresi a legfrissebb verziót és letölti.
+
+zim_sources:
+  # Magyar Wikipédia — teljes változat képekkel
+  # Méret: ~6 GB
+  - id: wikipedia_hu
+    pattern: "wikipedia_hu_all_maxi_*.zim"
+    base_url: "https://download.kiwix.org/zim/wikipedia/"
+    title: "Magyar Wikipédia"
+    description: "A teljes magyar Wikipédia képekkel és infoboxokkal."
+    category: "altalanos"
+    icon: "wikipedia"
+    enabled: true
+
+  # Magyar Wikipédia — szöveg-only verzió (kisebb)
+  # Méret: ~1.5 GB. Lassú net vagy kis tárhely esetén ezt használd.
+  - id: wikipedia_hu_nopic
+    pattern: "wikipedia_hu_all_nopic_*.zim"
+    base_url: "https://download.kiwix.org/zim/wikipedia/"
+    title: "Magyar Wikipédia (képek nélkül)"
+    description: "Alternatíva: ugyanaz, de képek nélkül. Negyed akkora."
+    category: "altalanos"
+    icon: "wikipedia"
+    enabled: false
+
+  # Magyar Wikiszótár
+  # Méret: ~150 MB
+  - id: wiktionary_hu
+    pattern: "wiktionary_hu_all_nopic_*.zim"
+    base_url: "https://download.kiwix.org/zim/wiktionary/"
+    title: "Magyar Wikiszótár"
+    description: "Szótár, etimológia, ragozási minták."
+    category: "nyelv"
+    icon: "dictionary"
+    enabled: true
+
+  # Magyar Wikikönyvek (tankönyvek, kézikönyvek)
+  # Méret: ~100 MB
+  - id: wikibooks_hu
+    pattern: "wikibooks_hu_all_maxi_*.zim"
+    base_url: "https://download.kiwix.org/zim/wikibooks/"
+    title: "Magyar Wikikönyvek"
+    description: "Tankönyvek, gyógynövény-felsorolás, főzés, programozás."
+    category: "oktatas"
+    icon: "book"
+    enabled: true
+
+  # Magyar Wikidézet
+  # Méret: ~50 MB
+  - id: wikiquote_hu
+    pattern: "wikiquote_hu_all_maxi_*.zim"
+    base_url: "https://download.kiwix.org/zim/wikiquote/"
+    title: "Magyar Wikidézet"
+    description: "Híres mondások, idézetek, közmondások magyarul."
+    category: "irodalom"
+    icon: "quote"
+    enabled: true
+
+  # Magyar Wikiforrás (klasszikus szövegek)
+  # Méret: ~500 MB
+  - id: wikisource_hu
+    pattern: "wikisource_hu_all_maxi_*.zim"
+    base_url: "https://download.kiwix.org/zim/wikisource/"
+    title: "Magyar Wikiforrás"
+    description: "Klasszikus magyar irodalom és történelmi szövegek eredetiben."
+    category: "irodalom"
+    icon: "scroll"
+    enabled: true
+
+# Térkép — Protomaps pmtiles fájl egy bounding box-szal kivágva.
+# A pmtiles formátum egy darab fájl, statikusan szolgálható, vektorosan renderel.
+map:
+  enabled: true
+
+  # Bounding box: nyugat, dél, kelet, észak (WGS84, fok)
+  # Alapértelmezett: Zala megye + szomszéd magyar megyék (Vas, Veszprém, Somogy)
+  # + horvát/szlovén/osztrák határvidék. ~300 MB méret.
+  #
+  # Másik példák:
+  # - Egész Magyarország:    "16.10,45.70,22.90,48.60"  (~1.2 GB)
+  # - Csak Zala megye:       "16.20,46.35,17.20,47.00"  (~50 MB)
+  # - Kárpát-medence:        "13.50,44.50,28.50,49.50"  (~3 GB)
+  bbox: "15.40,45.70,18.20,47.80"
+
+  output_name: "zala-region.pmtiles"
+
+  # Protomaps planet build forrása. A {date} placeholder helyére a script
+  # a legfrissebb elérhető dátumot helyettesíti.
+  source_url: "https://build.protomaps.com/{date}.pmtiles"
+
+  # Hány naponta tekintjük elavultnak a fájlt (update parancsra cseréli).
+  refresh_days: 30
+
+# Általános beállítások
+settings:
+  # Cseréskor hány régi verziót tartsunk meg a DATA_DIR-ben (a legfrissebb mellett).
+  # 0 = csak a legfrissebbet, 1 = az előzőt is megtartja (rollback opció).
+  keep_versions: 1
+
+  # HTTP user agent ami a kiwix.org-ra megy. Ne hagyd üresen.
+  user_agent: "hu-knowledge-ark/1.0 (+https://github.com/hajasgabor/hu-knowledge-ark)"
+
+  # Letöltés sávszélesség-limit (KB/s). 0 = nincs limit.
+  download_rate_limit_kb: 0

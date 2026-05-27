@@ -1,0 +1,14 @@
+[Unit]
+Description=hu-knowledge-ark — heti tartalom-frissítés
+Documentation=https://github.com/hajasgabor/hu-knowledge-ark
+
+[Timer]
+# Vasárnap hajnal 4 órakor. Ha a gép aludt, ébredés után pótolja (Persistent).
+OnCalendar=Sun *-*-* 04:00:00
+RandomizedDelaySec=30min
+Persistent=true
+
+Unit=hu-knowledge-ark-update.service
+
+[Install]
+WantedBy=timers.target
