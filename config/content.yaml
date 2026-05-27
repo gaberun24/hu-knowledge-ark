@@ -107,7 +107,7 @@ settings:
   keep_versions: 1
 
   # HTTP user agent ami a kiwix.org-ra megy. Ne hagyd üresen.
-  user_agent: "hu-knowledge-ark/1.0 (+https://github.com/hajasgabor/hu-knowledge-ark)"
+  user_agent: "hu-knowledge-ark/1.0 (+https://github.com/gaberun24/hu-knowledge-ark)"
 
   # Letöltés sávszélesség-limit (KB/s). 0 = nincs limit.
   download_rate_limit_kb: 0

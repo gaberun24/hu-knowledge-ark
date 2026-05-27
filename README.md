@@ -59,7 +59,7 @@ A tartalom a [Wikimédia](https://hu.wikipedia.org) projektekből származik, [C
 
 ```bash
 # 1. Klónozd a repot
-git clone https://github.com/hajasgabor/hu-knowledge-ark.git
+git clone https://github.com/gaberun24/hu-knowledge-ark.git
 cd hu-knowledge-ark
 
 # 2. Konfiguráld
