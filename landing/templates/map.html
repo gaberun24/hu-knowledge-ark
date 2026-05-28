@@ -9,43 +9,145 @@
         Terület (bbox): <code>{{ map_info.bbox }}</code>.
     </p>
     <div id="map"></div>
+    <p id="map-status" class="hint" style="margin-top:0.5rem"></p>
 </section>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+<!-- MapLibre GL JS: stabil UMD bundle, ipari szabvány vektoros térképekhez -->
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"
       crossorigin="anonymous">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"
         crossorigin="anonymous"></script>
-<script src="https://unpkg.com/protomaps-leaflet@4.2.1/dist/protomaps-leaflet.min.js"
+
+<!-- pmtiles JS: a fetch range request-ekkel olvassa a helyi .pmtiles fájlt -->
+<script src="https://unpkg.com/pmtiles@3.2.0/dist/pmtiles.js"
         crossorigin="anonymous"></script>
 
 <script>
 (function() {
+    const statusEl = document.getElementById('map-status');
+    const setStatus = (msg, isErr) => {
+        statusEl.textContent = msg;
+        statusEl.style.color = isErr ? '#c00' : '';
+    };
+
     // BBox: "west,south,east,north"
     const bbox = "{{ map_info.bbox }}".split(",").map(Number);
     const centerLat = (bbox[1] + bbox[3]) / 2;
     const centerLng = (bbox[0] + bbox[2]) / 2;
+    const PMTILES_URL = "{{ map_info.url }}";
 
-    const map = L.map("map").setView([centerLat, centerLng], 9);
+    // 1. pmtiles protokoll regisztrálása a MapLibre-be — innentől a "pmtiles://" séma él
+    const protocol = new pmtiles.Protocol();
+    maplibregl.addProtocol("pmtiles", protocol.tile);
 
-    const layer = protomapsL.leafletLayer({
-        url: "{{ map_info.url }}",
-        // Magyar nyelvű feliratok, ha rendelkezésre állnak (a Protomaps Basemap
-        // tartalmazza a `name:hu` címkéket, ahol létezik).
-        lang: "hu"
+    // 2. PMTiles instance + protocol cache, hogy a metadata-lekérdezés ne duplázódjon
+    const p = new pmtiles.PMTiles(PMTILES_URL);
+    protocol.add(p);
+
+    // 3. Egyszerű, magyar nyelvű style (Protomaps Basemaps formátum nélkül,
+    //    saját minimal layer-rel — gyors, kevés font/icon függőség).
+    const style = {
+        version: 8,
+        // Mivel a Protomaps planet build alapból nem tartalmaz glyph-eket,
+        // egy demotiles font source-ot használunk.
+        glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+        sources: {
+            protomaps: {
+                type: "vector",
+                url: "pmtiles://" + PMTILES_URL,
+                attribution: '© OpenStreetMap közreműködői'
+            }
+        },
+        layers: [
+            // Háttér
+            { id: "background", type: "background",
+              paint: { "background-color": "#f5f1ea" } },
+
+            // Vízfelületek
+            { id: "water", type: "fill", source: "protomaps", "source-layer": "water",
+              paint: { "fill-color": "#a0c8e8" } },
+
+            // Földterület
+            { id: "earth", type: "fill", source: "protomaps", "source-layer": "earth",
+              paint: { "fill-color": "#f5f1ea" } },
+
+            // Erdő, természeti terület
+            { id: "natural", type: "fill", source: "protomaps", "source-layer": "natural",
+              paint: { "fill-color": "#cde2c0", "fill-opacity": 0.6 } },
+
+            // Beépített területek
+            { id: "landuse", type: "fill", source: "protomaps", "source-layer": "landuse",
+              paint: { "fill-color": "#ecead8", "fill-opacity": 0.5 } },
+
+            // Épületek (csak nagyobb zoom-on)
+            { id: "buildings", type: "fill", source: "protomaps", "source-layer": "buildings",
+              minzoom: 13,
+              paint: { "fill-color": "#d9d0c1", "fill-outline-color": "#bdb2a0" } },
+
+            // Utak — egyszerűsített, három súlyban
+            { id: "roads-minor", type: "line", source: "protomaps", "source-layer": "roads",
+              filter: ["in", "kind", "minor_road", "path"],
+              minzoom: 12,
+              paint: { "line-color": "#ffffff", "line-width": 1 } },
+            { id: "roads-medium", type: "line", source: "protomaps", "source-layer": "roads",
+              filter: ["in", "kind", "medium_road"],
+              paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 8, 0.5, 14, 3] } },
+            { id: "roads-major", type: "line", source: "protomaps", "source-layer": "roads",
+              filter: ["in", "kind", "highway", "major_road"],
+              paint: { "line-color": "#fbd082", "line-width": ["interpolate", ["linear"], ["zoom"], 6, 1, 14, 5] } },
+
+            // Vasút
+            { id: "rail", type: "line", source: "protomaps", "source-layer": "roads",
+              filter: ["==", "kind", "rail"],
+              paint: { "line-color": "#a0a0a0", "line-width": 1, "line-dasharray": [2, 2] } },
+
+            // Helység-feliratok — magyar név ha van, különben az alapértelmezett
+            { id: "places-cities", type: "symbol", source: "protomaps", "source-layer": "places",
+              filter: ["in", "kind", "city", "country"],
+              layout: {
+                  "text-field": ["coalesce", ["get", "name:hu"], ["get", "name"]],
+                  "text-font": ["Noto Sans Regular"],
+                  "text-size": ["interpolate", ["linear"], ["zoom"], 4, 11, 10, 17],
+                  "text-anchor": "center"
+              },
+              paint: { "text-color": "#333", "text-halo-color": "#fff", "text-halo-width": 1.5 } },
+            { id: "places-towns", type: "symbol", source: "protomaps", "source-layer": "places",
+              filter: ["==", "kind", "locality"],
+              minzoom: 8,
+              layout: {
+                  "text-field": ["coalesce", ["get", "name:hu"], ["get", "name"]],
+                  "text-font": ["Noto Sans Regular"],
+                  "text-size": ["interpolate", ["linear"], ["zoom"], 8, 10, 14, 14]
+              },
+              paint: { "text-color": "#555", "text-halo-color": "#fff", "text-halo-width": 1.2 } }
+        ]
+    };
+
+    setStatus("Térkép inicializálás…");
+
+    const map = new maplibregl.Map({
+        container: 'map',
+        style: style,
+        center: [centerLng, centerLat],
+        zoom: 9,
+        maxBounds: [
+            [bbox[0] - 0.5, bbox[1] - 0.5],
+            [bbox[2] + 0.5, bbox[3] + 0.5]
+        ]
     });
-    layer.addTo(map);
 
-    // Bounding box-ra korlátozott navigálás
-    map.fitBounds([
-        [bbox[1], bbox[0]],
-        [bbox[3], bbox[2]]
-    ]);
-    map.setMaxBounds([
-        [bbox[1] - 0.5, bbox[0] - 0.5],
-        [bbox[3] + 0.5, bbox[2] + 0.5]
-    ]);
+    map.addControl(new maplibregl.NavigationControl(), 'top-left');
+    map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left');
+
+    map.on('load', () => {
+        setStatus("");
+        console.info("hu-knowledge-ark: térkép betöltve", { bbox, centerLat, centerLng });
+    });
+    map.on('error', (e) => {
+        const msg = e && e.error ? e.error.message : 'ismeretlen hiba';
+        setStatus("Hiba a térkép betöltésekor: " + msg, true);
+        console.error("MapLibre hiba:", e);
+    });
 })();
 </script>
 {% endblock %}
