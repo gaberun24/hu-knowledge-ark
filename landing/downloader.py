@@ -275,20 +275,92 @@ def _run_update() -> None:
         with _job_lock:
             _job.items_done += 1
 
-    # Térkép — pmtiles. Egyelőre szóljunk, hogy ezt parancssorból csináljuk
-    # (a go-pmtiles bináris az image-ben jobban kezel range request-eket;
-    # nem akarjuk a landing-be replikálni a teljes pmtiles olvasót).
+    # Térkép — pmtiles. Ha enabled és nincs vagy elavult, letöltjük a
+    # go-pmtiles image-vel a Docker socketen át.
     map_cfg = cfg.get("map", {}) or {}
     if map_cfg.get("enabled"):
-        map_file = DATA_DIR / "maps" / map_cfg.get("output_name", "")
-        if not map_file.exists():
-            _say("[megjegyzés] A térkép pmtiles még nincs. Futtasd parancssorból: "
-                 "./scripts/pmtiles-extract.sh — a webből nem tölthető hatékonyan.")
+        _extract_map(map_cfg)
 
     with _job_lock:
         _job.current_step = "Library újraépítése"
 
     _rebuild_library_via_docker()
+
+
+def _extract_map(map_cfg: dict) -> None:
+    """Letölti / frissíti a pmtiles térképet a Protomaps build serveréből.
+    Csak a megadott bbox-ot húzza le (range request-ek), nem a teljes planet-et."""
+    import docker
+
+    output_name = map_cfg.get("output_name", "region.pmtiles")
+    bbox = map_cfg.get("bbox", "")
+    source_tmpl = map_cfg.get("source_url", "https://build.protomaps.com/{date}.pmtiles")
+    refresh_days = int(map_cfg.get("refresh_days", 30))
+
+    if not bbox:
+        _say("[térkép] bbox üres, kihagyom.")
+        return
+
+    map_dir = DATA_DIR / "maps"
+    map_dir.mkdir(parents=True, exist_ok=True)
+    output_path = map_dir / output_name
+
+    if output_path.exists():
+        age_days = (time.time() - output_path.stat().st_mtime) / 86400
+        if age_days < refresh_days:
+            _say(f"[térkép] friss ({age_days:.0f} nap < {refresh_days}), kihagyom.")
+            return
+
+    # Legfrissebb Protomaps build keresése (visszafelé)
+    with _job_lock:
+        _job.current_step = "Térkép — Protomaps build keresése"
+        _job.current_item_name = output_name
+    _say("[térkép] Legfrissebb Protomaps build keresése…")
+    build_date = None
+    now = time.time()
+    for offset_days in (1, 2, 3, 4, 5, 7, 10, 14):
+        candidate = time.strftime("%Y%m%d", time.gmtime(now - offset_days * 86400))
+        url = source_tmpl.replace("{date}", candidate)
+        try:
+            r = requests.head(url, timeout=15)
+            if r.ok:
+                build_date = candidate
+                _say(f"[térkép] Talált build: {candidate}")
+                break
+        except Exception:
+            continue
+
+    if not build_date:
+        _say("[térkép] Nem találtam friss Protomaps build-et az elmúlt 2 hétben.")
+        return
+
+    source_url = source_tmpl.replace("{date}", build_date)
+
+    # go-pmtiles extract — Docker konténer, host pathra mountolva
+    map_dir_host = Path(DATA_DIR_HOST) / "maps"
+
+    with _job_lock:
+        _job.current_step = f"Térkép — kivágás ({bbox})"
+    _say(f"[térkép] Forrás: {source_url}")
+    _say(f"[térkép] BBox:   {bbox}")
+    _say(f"[térkép] Cél:    /maps/{output_name}")
+    _say("[térkép] Csak a bbox területét tölti le (range requests). Lassú, kb. 5-15 perc lehet.")
+
+    client = docker.from_env()
+    try:
+        client.containers.run(
+            image="protomaps/go-pmtiles:latest",
+            command=["extract", source_url, f"/out/{output_name}", f"--bbox={bbox}"],
+            volumes={str(map_dir_host): {"bind": "/out", "mode": "rw"}},
+            user=f"{PUID}:{PGID}",
+            remove=True,
+            stdout=True,
+            stderr=True,
+        )
+        size_mb = output_path.stat().st_size // 1024 // 1024
+        _say(f"[térkép] Kész: {output_name} ({size_mb} MB)")
+    except Exception as e:
+        _say(f"[térkép] HIBA a kivágáskor: {e}")
 
 
 def run_update_job() -> bool:

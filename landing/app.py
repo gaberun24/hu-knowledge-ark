@@ -205,14 +205,14 @@ def _save_config_dict(cfg: dict) -> None:
 
 
 # A kategória-megjelenítéshez szükséges méretbecslések, hogy a /settings UI
-# tudja mondani "ez kb 6 GB lesz". Konzervatív becslések.
+# tudja mondani "ez kb 11 GB lesz". Mérések 2026 májusból, valós adat alapján.
 ESTIMATED_SIZES_MB = {
-    "wikipedia_hu":         6500,
-    "wikipedia_hu_nopic":   1500,
-    "wiktionary_hu":         150,
-    "wikibooks_hu":          100,
+    "wikipedia_hu":        11000,
+    "wikipedia_hu_nopic":   3000,
+    "wiktionary_hu":         700,
+    "wikibooks_hu":          550,
     "wikiquote_hu":           20,
-    "wikisource_hu":         500,
+    "wikisource_hu":          85,
 }
 
 
